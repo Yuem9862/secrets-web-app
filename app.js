@@ -5,12 +5,16 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 const findOrCreate = require('mongoose-findorcreate')
-// require express-session, passport, passport-local-mongoose; no need to set up passport-local
+
+//set up session
 const session = require("express-session");
+
+//set up passport
 const passport = require("passport");
-const passportLocalMongoose = require("passport-local-mongoose");
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const FacebookStrategy = require('passport-facebook').Strategy;
+//Simplifies building username and password login with Passport.
+const passportLocalMongoose = require("passport-local-mongoose");
+
 
 
 const app = express();
@@ -19,7 +23,8 @@ app.use(express.static("public"));
 app.set('view engine','ejs');
 app.use(bodyParser.urlencoded({extended: true}));
 
-// set up session
+//Set up session
+//Be sure to use session() before passport.session() to ensure that the login session is restored in the correct order.
 app.use(session({
   secret: process.env.SECRET,
   resave: false,
@@ -27,12 +32,15 @@ app.use(session({
 }));
 
 
-//initialize passport
+//In a Express-based application, passport.initialize() middleware is required to initialize Passport.
 app.use(passport.initialize());
+//If your application uses persistent login sessions, passport.session() middleware must also be used.
 app.use(passport.session());
 
+//connect to mongoose
 mongoose.connect("mongodb://localhost:27017/user");
 
+//create mongoose schema
 const userSchema = new mongoose.Schema({
   email:String,
   password:String,
@@ -45,18 +53,23 @@ const userSchema = new mongoose.Schema({
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
+//create the mongo model
 const User = new mongoose.model("User", userSchema);
 
+//Allow local authentication accepts username and password arguments, which are submitted to the application via a login form.
 passport.use(User.createStrategy());
+
+
+// In order to support login sessions, Passport will serialize and deserialize user instances to and from the session.
 passport.serializeUser(function(user, done) {
   done(null, user.id);
 });
-
 passport.deserializeUser(function(id, done) {
   User.findById(id, function(err, user) {
     done(err, user);
   });
 });
+
 
 //passport Google auth configuration
 passport.use(new GoogleStrategy({
@@ -66,20 +79,6 @@ passport.use(new GoogleStrategy({
   },
   function(accessToken, refreshToken, profile, cb) {
       User.findOrCreate({ googleId: profile.id }, function (err, user) {
-      return cb(err, user);
-    });
-  }
-));
-
-//passport Facebook auth configuration
-passport.use(new FacebookStrategy({
-    clientID: process.env.FACEBOOK_CLIENT_ID,
-    clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-    callbackURL: "http://localhost:3000/auth/facebook/secrets"
-  },
-  function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
-    User.findOrCreate({facebookId:profile.id}, function(err, user) {
       return cb(err, user);
     });
   }
@@ -98,17 +97,6 @@ app.get("/auth/google/Secrets",
       res.redirect("/secrets");
 });
 
-app.get('/auth/facebook',
-  passport.authenticate("facebook",)
-);
-
-app.get('/auth/facebook/secrets',
-  passport.authenticate("facebook", { failureRedirect: '/login' }),
-  function(req, res) {
-    res.redirect("/secrets");
-});
-
-
 app.get("/login", function(req,res){
   res.render("login");
 });
@@ -125,7 +113,7 @@ app.get("/secrets", function(req, res){
       console.log(err);
     }else{
       if(founderUser){
-      res.render("secrets",{usersWithSecrets:founderUser});  
+      res.render("secrets",{usersWithSecrets:founderUser});
       }
     }
   });
